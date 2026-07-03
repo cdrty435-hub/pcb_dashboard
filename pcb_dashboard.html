@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>설비 PCB 연결 관리 대시보드</title>
+<style>
+  :root{
+    --bg:#2a3550; --panel:#354165; --panel2:#3d4a72; --border:#5a6996;
+    --text:#f8fafc; --text2:#dbe2f5; --text3:#aab7db;
+    --box:#60a5fa; --ext:#fbbf24; --comm:#2dd4bf;
+    --p1:#f87171; --p2:#fbbf24; --p3:#4ade80;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:16px;}
+  h1{font-size:20px;margin:0;font-weight:600;}
+  .sub{color:var(--text2);font-size:13px;margin-top:4px;}
+  select,input[type=text]{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:13px;}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+  button{border:none;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600;}
+  .btn-primary{background:var(--comm);color:#022;}
+  .btn-ghost{background:var(--panel2);color:var(--text2);border:1px solid var(--border);}
+  .btn-ghost.active{background:var(--ext);color:#3a2500;border-color:var(--ext);}
+  .btn-danger{background:#7f1d1d;color:#fecaca;}
+  .hint{font-size:12px;color:var(--text3);}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:22px;}
+  .panel h2{font-size:14px;margin:0 0 12px;color:var(--text2);font-weight:600;}
+  #canvasWrap{position:relative;width:100%;height:560px;background:
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size:24px 24px;border:1px dashed var(--border);border-radius:10px;overflow:auto;}
+  #arrowSvg{position:absolute;top:0;left:0;pointer-events:none;}
+  .box{position:absolute;width:150px;background:var(--panel2);border-radius:10px;border:2px solid var(--border);cursor:grab;user-select:none;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.25);}
+  .box.selecting{outline:3px solid var(--comm);}
+  .box .thumb{width:100%;height:70px;background:#1c2536 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px;}
+  .box .info{padding:6px 8px;}
+  .box .info .t{font-size:12.5px;font-weight:700;}
+  .box .info .r{font-size:10.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--text2);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  td{padding:7px 10px;border-bottom:1px solid #465280;vertical-align:top;}
+  tr:hover td{background:#485a8c;cursor:pointer;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.p1{background:#4a1f1f;color:#fca5a5;}
+  .badge.p2{background:#4a3813;color:#fcd34d;}
+  .badge.p3{background:#173a26;color:#86efac;}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;width:440px;max-width:92vw;max-height:88vh;overflow:auto;}
+  .modal h3{margin:0 0 14px;font-size:16px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--text2);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;font-size:13px;font-family:inherit;}
+  .field textarea{resize:vertical;min-height:50px;}
+  .modal-actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px;}
+  .photo-preview{width:100%;height:130px;border-radius:8px;background:#1c2536 center/cover no-repeat;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;margin-bottom:8px;}
+  .save-toast{position:fixed;bottom:20px;right:20px;background:var(--comm);color:#022;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;z-index:60;}
+  .save-toast.show{opacity:1;}
+  .repair-item{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>설비 PCB 연결 관리 대시보드 <span style="font-weight:400;font-size:13px;color:var(--text3)">/ แดชบอร์ดจัดการ PCB ของเครื่องจักร</span></h1>
+      <div class="sub">사진 + 자유 배치 + 수동 화살표 연결 / รูปภาพ + จัดวางอิสระ + เชื่อมลูกศรเอง</div>
+    </div>
+    <select id="machineSelect"></select>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn-primary" onclick="addBox()">+ 박스 추가 / เพิ่มกล่อง</button>
+    <button class="btn-ghost" id="arrowModeBtn" onclick="toggleArrowMode()">화살표 연결 모드 / โหมดวาดลูกศร</button>
+    <button class="btn-ghost" onclick="resetMachine()">이 설비 초기화 / รีเซ็ตเครื่องนี้</button>
+    <span class="hint" id="arrowHint">박스를 드래그해서 위치를 옮기고, 클릭하면 상세정보(사진 포함)를 편집합니다.</span>
+  </div>
+
+  <div class="panel">
+    <h2 id="machineTitle">전체 연결도</h2>
+    <div id="canvasWrap">
+      <svg id="arrowSvg"></svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>박스 목록 / รายการกล่อง</h2>
+    <table>
+      <thead><tr><th>이름/ชื่อ</th><th>역할/หน้าที่</th><th>우선순위/ลำดับ</th><th>수리이력/ประวัติซ่อม</th><th>비고/หมายเหตุ</th></tr></thead>
+      <tbody id="boxTableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>화살표(연결) 목록 / รายการลูกศร</h2>
+    <table>
+      <thead><tr><th>FROM</th><th>TO</th><th>구분/ประเภท</th><th>사양/สเปค</th><th>비고/หมายเหตุ</th></tr></thead>
+      <tbody id="arrowTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modalOverlay" class="overlay" style="display:none;">
+  <div class="modal" id="modalBox"></div>
+</div>
+<div class="save-toast" id="toast">저장되었습니다 / บันทึกแล้ว</div>
+
+<script>
+let MACHINES = [];
+let currentMachine = null;
+let boxes = {};
+let arrows = {};
+let arrowMode = false;
+let arrowFirst = null;
+let dragState = null;
+
+function toast(){
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1300);
+}
+
+function initMachines(){
+  MACHINES = [];
+  for(let i=1;i<=23;i++) MACHINES.push({id:'dc'+i, name:'다이캐스팅 '+i+'호기'});
+  const sel = document.getElementById('machineSelect');
+  sel.innerHTML = MACHINES.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  sel.addEventListener('change', e=>switchMachine(e.target.value));
+
+  const savedCurrent = localStorage.getItem('current-machine');
+  currentMachine = savedCurrent && MACHINES.some(m=>m.id===savedCurrent) ? savedCurrent : 'dc1';
+  sel.value = currentMachine;
+  loadMachine(currentMachine);
+}
+
+function switchMachine(id){
+  currentMachine = id;
+  localStorage.setItem('current-machine', id);
+  loadMachine(id);
+}
+
+function defaultBoxesForDc1(){
+  return [
+    {id:'b1', title:'PCB4', photo:'', role:'', power:'', signalType:'시그널(직렬)', priority:'2', notes:'Box 내 시작단', x:20, y:40, repairs:[]},
+    {id:'b2', title:'PCB3', photo:'', role:'', power:'', signalType:'시그널(직렬)', priority:'2', notes:'', x:20, y:150, repairs:[]},
+    {id:'b3', title:'PCB2', photo:'', role:'', power:'', signalType:'시그널+분기', priority:'1', notes:'외부 3개 PCB로 분기되는 중심 보드', x:20, y:260, repairs:[]},
+    {id:'b4', title:'PCB1', photo:'', role:'', power:'', signalType:'시그널(직렬)', priority:'1', notes:'Box 내 맨 끝단', x:20, y:370, repairs:[]},
+    {id:'b5', title:'PCB6', photo:'', role:'전원부', power:'', signalType:'전원', priority:'1', notes:'전원부 - 전압 이상시 전체 라인 영향', x:400, y:60, repairs:[]},
+    {id:'b6', title:'PCB5', photo:'', role:'로봇 제어', power:'', signalType:'통신/시그널', priority:'1', notes:'Robot 연결', x:400, y:200, repairs:[]},
+    {id:'b7', title:'PCB11', photo:'', role:'', power:'', signalType:'', priority:'3', notes:'3차 연결', x:400, y:340, repairs:[]},
+  ];
+}
+
+function loadMachine(id){
+  document.getElementById('machineTitle').textContent =
+    (MACHINES.find(m=>m.id===id)||{}).name + ' 연결도 / แผนผังการเชื่อมต่อ';
+
+  boxes = {};
+  arrows = {};
+  try{
+    const raw = localStorage.getItem('boxes:'+id);
+    if(raw){
+      JSON.parse(raw).forEach(b=>boxes[b.id]=b);
+    } else if(id==='dc1'){
+      defaultBoxesForDc1().forEach(b=>boxes[b.id]=b);
+      persistBoxes();
+    }
+  }catch(e){ boxes = {}; }
+  try{
+    const raw = localStorage.getItem('arrows:'+id);
+    if(raw) JSON.parse(raw).forEach(a=>arrows[a.id]=a);
+  }catch(e){ arrows = {}; }
+
+  arrowMode = false;
+  arrowFirst = null;
+  document.getElementById('arrowModeBtn').classList.remove('active');
+  renderAll();
+}
+
+function persistBoxes(){
+  localStorage.setItem('boxes:'+currentMachine, JSON.stringify(Object.values(boxes)));
+}
+function persistArrows(){
+  localStorage.setItem('arrows:'+currentMachine, JSON.stringify(Object.values(arrows)));
+}
+
+function renderAll(){
+  renderCanvas();
+  renderBoxTable();
+  renderArrowTable();
+}
+
+function renderCanvas(){
+  const wrap = document.getElementById('canvasWrap');
+  wrap.querySelectorAll('.box').forEach(el=>el.remove());
+
+  Object.values(boxes).forEach(b=>{
+    const el = document.createElement('div');
+    el.className = 'box';
+    el.style.left = b.x+'px';
+    el.style.top = b.y+'px';
+    el.style.borderColor = priorityColor(b.priority);
+    el.dataset.id = b.id;
+    el.innerHTML = `
+      <div class="thumb" style="${b.photo?`background-image:url('${b.photo}')`:''}">${b.photo?'':'사진 없음'}</div>
+      <div class="info"><div class="t">${b.title||'제목없음'}</div><div class="r">${b.role||'역할 미입력'}</div></div>`;
+    el.addEventListener('mousedown', e=>startDrag(e, b.id));
+    el.addEventListener('click', e=>{
+      if(dragState && dragState.moved) return;
+      if(arrowMode){ handleArrowClick(b.id); }
+      else { openBoxModal(b.id); }
+    });
+    wrap.appendChild(el);
+  });
+
+  drawArrows();
+}
+
+function priorityColor(p){
+  return p==='1' ? 'var(--p1)' : p==='2' ? 'var(--p2)' : p==='3' ? 'var(--p3)' : 'var(--border)';
+}
+
+function drawArrows(){
+  const svg = document.getElementById('arrowSvg');
+  const wrap = document.getElementById('canvasWrap');
+  svg.setAttribute('width', wrap.scrollWidth);
+  svg.setAttribute('height', wrap.scrollHeight);
+  let s = `<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+  Object.values(arrows).forEach(a=>{
+    const from = boxes[a.from], to = boxes[a.to];
+    if(!from || !to) return;
+    const x1 = from.x+75, y1 = from.y+50, x2 = to.x+75, y2 = to.y+50;
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fbbf24" stroke-width="2" marker-end="url(#ah)" style="pointer-events:auto;cursor:pointer;" onclick="openArrowModal('${a.id}')"/>`;
+  });
+  svg.innerHTML = s;
+}
+
+// ---- Drag ----
+function startDrag(e, id){
+  if(arrowMode) return;
+  e.preventDefault();
+  const wrap = document.getElementById('canvasWrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  const b = boxes[id];
+  dragState = {
+    id, moved:false,
+    offX: e.clientX - wrapRect.left - b.x + wrap.scrollLeft,
+    offY: e.clientY - wrapRect.top - b.y + wrap.scrollTop,
+  };
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', endDrag);
+}
+function onDrag(e){
+  if(!dragState) return;
+  dragState.moved = true;
+  const wrap = document.getElementById('canvasWrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  const b = boxes[dragState.id];
+  b.x = Math.max(0, e.clientX - wrapRect.left - dragState.offX + wrap.scrollLeft);
+  b.y = Math.max(0, e.clientY - wrapRect.top - dragState.offY + wrap.scrollTop);
+  renderCanvas();
+}
+function endDrag(){
+  if(dragState && dragState.moved){ persistBoxes(); }
+  dragState = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', endDrag);
+}
+
+// ---- Arrow mode ----
+function toggleArrowMode(){
+  arrowMode = !arrowMode;
+  arrowFirst = null;
+  document.getElementById('arrowModeBtn').classList.toggle('active', arrowMode);
+  document.getElementById('arrowHint').textContent = arrowMode
+    ? '화살표로 연결할 박스 2개를 순서대로 클릭하세요 (시작 → 끝) / คลิกกล่อง 2 กล่องตามลำดับเพื่อวาดลูกศร'
+    : '박스를 드래그해서 위치를 옮기고, 클릭하면 상세정보(사진 포함)를 편집합니다.';
+  renderCanvas();
+}
+function handleArrowClick(id){
+  if(!arrowFirst){
+    arrowFirst = id;
+    document.querySelectorAll('.box').forEach(el=>el.classList.toggle('selecting', el.dataset.id===id));
+  } else {
+    if(arrowFirst !== id){
+      const aid = 'a'+Date.now();
+      arrows[aid] = {id:aid, from:arrowFirst, to:id, type:'시그널', spec:'', notes:''};
+      persistArrows();
+      toast();
+    }
+    arrowFirst = null;
+    document.querySelectorAll('.box').forEach(el=>el.classList.remove('selecting'));
+    renderAll();
+  }
+}
+
+// ---- Box modal ----
+function addBox(){
+  const id = 'b'+Date.now();
+  boxes[id] = {id, title:'새 박스', photo:'', role:'', power:'', signalType:'', priority:'', notes:'', x:20, y:20, repairs:[]};
+  persistBoxes();
+  renderAll();
+  openBoxModal(id);
+}
+
+function repairListHtml(b){
+  const repairs = b.repairs || [];
+  if(repairs.length===0) return '<div class="hint" style="margin-bottom:10px;">등록된 수리 이력이 없습니다.</div>';
+  return repairs.map((r,i)=>`
+    <div class="repair-item">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <strong style="font-size:12.5px;">수리${i+1} <span style="color:var(--text3);font-weight:400;">${r.date||''}</span></strong>
+        <button class="btn-ghost" style="padding:3px 9px;font-size:11px;" onclick="deleteRepair('${b.id}',${i})">삭제</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);"><b style="color:var(--text)">증상:</b> ${r.symptom||'-'}</div>
+      <div style="font-size:12px;color:var(--text2);"><b style="color:var(--text)">원인분석:</b> ${r.cause||'-'}</div>
+      <div style="font-size:12px;color:var(--text2);"><b style="color:var(--text)">해결방안:</b> ${r.solution||'-'}</div>
+    </div>`).join('');
+}
+
+function openBoxModal(id){
+  const b = boxes[id];
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <h3>박스 상세 정보 / รายละเอียดกล่อง</h3>
+    <div class="field"><label>사진 / รูปภาพ</label>
+      <div class="photo-preview" id="photoPreview" style="${b.photo?`background-image:url('${b.photo}')`:''}">${b.photo?'':'사진을 선택하세요'}</div>
+      <input type="file" accept="image/*" id="f_photo" onchange="handlePhotoUpload(event)">
+    </div>
+    <div class="field"><label>이름/제목 / ชื่อ</label><input id="f_title" value="${b.title||''}"></div>
+    <div class="field"><label>역할/기능 / หน้าที่</label><input id="f_role" value="${b.role||''}"></div>
+    <div class="field"><label>전원 구분(AC/DC, 전압) / ประเภทไฟ</label><input id="f_power" value="${b.power||''}"></div>
+    <div class="field"><label>신호 타입 / ชนิดสัญญาณ</label><input id="f_signalType" value="${b.signalType||''}"></div>
+    <div class="field"><label>고장시 확인 우선순위 / ลำดับตรวจสอบ</label>
+      <select id="f_priority">
+        <option value="" ${!b.priority?'selected':''}>미지정</option>
+        <option value="1" ${b.priority==='1'?'selected':''}>1 (먼저 확인)</option>
+        <option value="2" ${b.priority==='2'?'selected':''}>2</option>
+        <option value="3" ${b.priority==='3'?'selected':''}>3</option>
+      </select></div>
+    <div class="field"><label>비고 / หมายเหตุ</label><textarea id="f_notes">${b.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="deleteBox('${id}')">박스 삭제 / ลบกล่อง</button>
+      <div>
+        <button class="btn-ghost" onclick="closeModal()">취소</button>
+        <button class="btn-primary" onclick="saveBoxModal('${id}')">저장</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
+      <h3 style="font-size:14px;margin:0 0 10px;">수리 이력 / ประวัติการซ่อม</h3>
+      <div id="repairList">${repairListHtml(b)}</div>
+      <div style="background:var(--panel2);border:1px dashed var(--border);border-radius:8px;padding:12px;margin-top:10px;">
+        <div class="field"><label>날짜</label><input type="date" id="r_date"></div>
+        <div class="field"><label>증상</label><input id="r_symptom"></div>
+        <div class="field"><label>원인분석</label><textarea id="r_cause"></textarea></div>
+        <div class="field"><label>해결방안</label><textarea id="r_solution"></textarea></div>
+        <button class="btn-primary" style="width:100%;" onclick="addRepair('${id}')">+ 수리 이력 추가</button>
+      </div>
+    </div>`;
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+function handlePhotoUpload(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    const img = new Image();
+    img.onload = function(){
+      const maxW = 320;
+      const scale = Math.min(1, maxW/img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width*scale;
+      canvas.height = img.height*scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      document.getElementById('photoPreview').style.backgroundImage = `url('${dataUrl}')`;
+      document.getElementById('photoPreview').textContent = '';
+      document.getElementById('photoPreview').dataset.value = dataUrl;
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveBoxModal(id){
+  const b = boxes[id];
+  b.title = document.getElementById('f_title').value;
+  b.role = document.getElementById('f_role').value;
+  b.power = document.getElementById('f_power').value;
+  b.signalType = document.getElementById('f_signalType').value;
+  b.priority = document.getElementById('f_priority').value;
+  b.notes = document.getElementById('f_notes').value;
+  const pv = document.getElementById('photoPreview').dataset.value;
+  if(pv) b.photo = pv;
+  try{
+    persistBoxes();
+  }catch(e){
+    alert('저장 공간이 부족합니다. 사진 용량이 너무 클 수 있습니다. / พื้นที่จัดเก็บไม่พอ');
+    return;
+  }
+  toast();
+  closeModal();
+  renderAll();
+}
+
+function deleteBox(id){
+  if(!confirm('이 박스를 삭제할까요? / ลบกล่องนี้หรือไม่?')) return;
+  delete boxes[id];
+  Object.keys(arrows).forEach(k=>{
+    if(arrows[k].from===id || arrows[k].to===id) delete arrows[k];
+  });
+  persistBoxes();
+  persistArrows();
+  closeModal();
+  renderAll();
+}
+
+function addRepair(id){
+  const b = boxes[id];
+  if(!b.repairs) b.repairs = [];
+  const entry = {
+    date: document.getElementById('r_date').value,
+    symptom: document.getElementById('r_symptom').value,
+    cause: document.getElementById('r_cause').value,
+    solution: document.getElementById('r_solution').value,
+  };
+  if(!entry.symptom && !entry.cause && !entry.solution) return;
+  b.repairs.push(entry);
+  persistBoxes();
+  openBoxModal(id);
+}
+function deleteRepair(id, idx){
+  boxes[id].repairs.splice(idx,1);
+  persistBoxes();
+  openBoxModal(id);
+}
+
+// ---- Arrow modal ----
+function openArrowModal(id){
+  const a = arrows[id];
+  const box = document.getElementById('modalBox');
+  const opts = Object.values(boxes).map(b=>`<option value="${b.id}" ${a.from===b.id?'selected':''}>${b.title}</option>`).join('');
+  const optsTo = Object.values(boxes).map(b=>`<option value="${b.id}" ${a.to===b.id?'selected':''}>${b.title}</option>`).join('');
+  box.innerHTML = `
+    <h3>화살표(연결) 상세 / รายละเอียดลูกศร</h3>
+    <div class="field"><label>FROM</label><select id="a_from">${opts}</select></div>
+    <div class="field"><label>TO</label><select id="a_to">${optsTo}</select></div>
+    <div class="field"><label>구분 / ประเภท</label>
+      <select id="a_type">
+        <option ${a.type==='전원'?'selected':''}>전원</option>
+        <option ${a.type==='시그널'?'selected':''}>시그널</option>
+        <option ${a.type==='통신'?'selected':''}>통신</option>
+      </select></div>
+    <div class="field"><label>전압/사양 / สเปค</label><input id="a_spec" value="${a.spec||''}"></div>
+    <div class="field"><label>비고 / หมายเหตุ</label><textarea id="a_notes">${a.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="deleteArrow('${id}')">삭제</button>
+      <div><button class="btn-ghost" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="saveArrowModal('${id}')">저장</button></div>
+    </div>`;
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+function saveArrowModal(id){
+  const a = arrows[id];
+  a.from = document.getElementById('a_from').value;
+  a.to = document.getElementById('a_to').value;
+  a.type = document.getElementById('a_type').value;
+  a.spec = document.getElementById('a_spec').value;
+  a.notes = document.getElementById('a_notes').value;
+  persistArrows();
+  toast();
+  closeModal();
+  renderAll();
+}
+function deleteArrow(id){
+  delete arrows[id];
+  persistArrows();
+  closeModal();
+  renderAll();
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+// ---- Tables ----
+function renderBoxTable(){
+  const tbody = document.getElementById('boxTableBody');
+  tbody.innerHTML = '';
+  Object.values(boxes).forEach(b=>{
+    const tr = document.createElement('tr');
+    tr.onclick = ()=>openBoxModal(b.id);
+    const rc = (b.repairs||[]).length;
+    tr.innerHTML = `<td>${b.title}</td><td>${b.role||'<span class="hint">미입력</span>'}</td>
+      <td>${b.priority?`<span class="badge p${b.priority}">${b.priority}</span>`:'-'}</td>
+      <td>${rc?rc+'건':'-'}</td><td style="color:var(--text2)">${b.notes||''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+function renderArrowTable(){
+  const tbody = document.getElementById('arrowTableBody');
+  tbody.innerHTML = '';
+  Object.values(arrows).forEach(a=>{
+    const tr = document.createElement('tr');
+    tr.onclick = ()=>openArrowModal(a.id);
+    const fromT = boxes[a.from] ? boxes[a.from].title : '?';
+    const toT = boxes[a.to] ? boxes[a.to].title : '?';
+    tr.innerHTML = `<td>${fromT}</td><td>${toT}</td><td>${a.type||'-'}</td><td>${a.spec||'-'}</td><td style="color:var(--text2)">${a.notes||''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function resetMachine(){
+  if(!confirm('이 설비의 박스/화살표 데이터를 모두 초기화합니다. 계속할까요? / รีเซ็ตข้อมูลเครื่องนี้ทั้งหมด?')) return;
+  localStorage.removeItem('boxes:'+currentMachine);
+  localStorage.removeItem('arrows:'+currentMachine);
+  loadMachine(currentMachine);
+}
+
+initMachines();
+window.addEventListener('resize', drawArrows);
+</script>
+</body>
+</html>
